@@ -320,6 +320,79 @@ agent = create_deep_agent(
 
 ```
 
+### `exclude_tools`
+
+By default, Deep Agents come with a set of built-in system tools including `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`, and `task`. You can selectively exclude specific tools from the main agent if they're not needed for your use case.
+
+```python
+from deepagents import create_deep_agent
+
+# Exclude todo list and file system tools from the main agent
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    exclude_tools=["write_todos", "write_file", "edit_file"]
+)
+```
+
+**Available tools to exclude:**
+- `write_todos` - Planning/todo list tool
+- `ls` - List directory contents
+- `read_file` - Read files from filesystem
+- `write_file` - Write new files
+- `edit_file` - Edit existing files
+- `glob` - Find files by pattern
+- `grep` - Search file contents
+- `execute` - Execute commands (if backend supports it)
+- `task` - Spawn subagents
+
+### `subagent_exclude_tools`
+
+Similar to `exclude_tools`, you can exclude default system tools from all subagents. This is useful when you want subagents to have a more restricted set of capabilities.
+
+```python
+from deepagents import create_deep_agent
+
+# Exclude file writing capabilities from all subagents
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    subagent_exclude_tools=["write_file", "edit_file", "execute"]
+)
+```
+
+### `summarization_config`
+
+Deep Agents automatically manage context size by summarizing old messages when approaching the model's token limit. You can customize this behavior with the `summarization_config` parameter.
+
+```python
+from deepagents import create_deep_agent
+
+# Configure when summarization triggers and what to keep
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    summarization_config={
+        "max_tokens": 100000,      # Trigger summarization at 100k tokens
+        "keep_messages": 5,         # Keep the last 5 messages as-is
+    }
+)
+
+# Advanced configuration using tuple format
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-4-20250514",
+    summarization_config={
+        "trigger": ("fraction", 0.8),  # Trigger at 80% of context window
+        "keep": ("fraction", 0.1),      # Keep 10% of messages after summarizing
+    }
+)
+```
+
+**Configuration options:**
+- `max_tokens` (int): Token limit before summarization triggers (e.g., 100000)
+- `keep_messages` (int): Number of recent messages to keep as-is (e.g., 5)
+- `trigger` (tuple): Advanced - `("tokens", N)` or `("fraction", 0.8)`
+- `keep` (tuple): Advanced - `("messages", N)` or `("fraction", 0.1)`
+
+If not provided, defaults are intelligently calculated based on the model's context window profile.
+
 ## Deep Agents Middleware
 
 Deep Agents are built with a modular middleware architecture. As a reminder, Deep Agents have access to:

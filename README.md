@@ -199,6 +199,46 @@ agent = create_deep_agent(
 
 See the [human-in-the-loop documentation](https://docs.langchain.com/oss/python/deepagents/human-in-the-loop) for more details.
 
+### `exclude_tools` & `subagent_exclude_tools`
+
+By default, deep agents come with built-in tools (see [Built-in Tools](#built-in-tools)). You can selectively exclude tools from the main agent or subagents:
+
+```python
+from deepagents import create_deep_agent
+
+# Exclude specific tools from the main agent
+agent = create_deep_agent(
+    exclude_tools=["write_todos", "write_file"],  # Main agent won't have these
+    subagent_exclude_tools=["execute"],           # Subagents won't have this
+)
+```
+
+**Available tools to exclude:** `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`, `task`
+
+### `summarization_config`
+
+Deep agents automatically summarize old messages when approaching token limits. Customize this behavior:
+
+```python
+from deepagents import create_deep_agent
+
+# Simple configuration
+agent = create_deep_agent(
+    summarization_config={
+        "max_tokens": 100000,      # Trigger at 100k tokens
+        "keep_messages": 5,         # Keep last 5 messages
+    }
+)
+
+# Advanced: Use fractions instead of absolute values
+agent = create_deep_agent(
+    summarization_config={
+        "trigger": ("fraction", 0.8),  # Trigger at 80% of context
+        "keep": ("fraction", 0.1),      # Keep 10% after summarizing
+    }
+)
+```
+
 ### `backend`
 
 Deep agents use pluggable backends to control how filesystem operations work. By default, files are stored in the agent's ephemeral state. You can configure different backends for local disk access, persistent cross-conversation storage, or hybrid routing.
