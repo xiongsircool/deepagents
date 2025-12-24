@@ -16,12 +16,14 @@ from langgraph.cache.base import BaseCache
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
-
+# ---------------------------- 库内封装的模块 ----------------------------
 from deepagents.backends.protocol import BackendFactory, BackendProtocol
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent, SubAgent, SubAgentMiddleware
 
+
+# ---------------------------- 基础提示词 用于控制文件管理todolist等模块 ----------------------------
 BASE_AGENT_PROMPT = "In order to complete the objective that the user asks of you, you have access to a number of standard tools."
 
 
@@ -53,6 +55,9 @@ def create_deep_agent(
     debug: bool = False,
     name: str | None = None,
     cache: BaseCache | None = None,
+    exclude_tools: list[str] | None = None,
+    subagent_exclude_tools: list[str] | None = None,
+    summarization_config: dict[str, Any] | None = None,
 ) -> CompiledStateGraph:
     """Create a deep agent.
 
@@ -91,6 +96,16 @@ def create_deep_agent(
         debug: Whether to enable debug mode. Passed through to create_agent.
         name: The name of the agent. Passed through to create_agent.
         cache: The cache to use for the agent. Passed through to create_agent.
+        exclude_tools: List of default system tool names to exclude from the main agent.
+            Available tools: `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`, `task`.
+        subagent_exclude_tools: List of default system tool names to exclude from all 
+            subagents. Available tools: `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`, `task`.
+        summarization_config: Configuration for the context summarization middleware.
+            - `max_tokens`: (int) The token limit before summarization is triggered (e.g., 100000).
+            - `keep_messages`: (int) How many recent messages to keep as-is (e.g., 5).
+            - (Advanced) `trigger`: Alternative tuple format, e.g. `("fraction", 0.8)`.
+            - (Advanced) `keep`: Alternative tuple format, e.g. `("fraction", 0.1)`.
+            If not provided, defaults are intelligently calculated based on model profile.
 
     Returns:
         A configured deep agent.
@@ -98,39 +113,71 @@ def create_deep_agent(
     if model is None:
         model = get_default_model()
 
+    # Support both intuitive and advanced keys
+    trigger_override = None
+    keep_override = None
+    if summarization_config:
+        # Priority 1: Direct token/message count
+        if "max_tokens" in summarization_config:
+            trigger_override = ("tokens", summarization_config["max_tokens"])
+        elif "trigger" in summarization_config:
+            trigger_override = summarization_config["trigger"]
+            
+        if "keep_messages" in summarization_config:
+            keep_override = ("messages", summarization_config["keep_messages"])
+        elif "keep" in summarization_config:
+            keep_override = summarization_config["keep"]
+
     if (
         model.profile is not None
         and isinstance(model.profile, dict)
         and "max_input_tokens" in model.profile
         and isinstance(model.profile["max_input_tokens"], int)
     ):
-        trigger = ("fraction", 0.85)
-        keep = ("fraction", 0.10)
+        trigger = trigger_override or ("fraction", 0.85)
+        keep = keep_override or ("fraction", 0.10)
     else:
-        trigger = ("tokens", 170000)
-        keep = ("messages", 6)
+        trigger = trigger_override or ("tokens", 150000)
+        keep = keep_override or ("messages", 6)
+
+
+
+
+    main_exclude = exclude_tools or []
+    sub_exclude = subagent_exclude_tools or []
+
+    def filter_tools(mw: AgentMiddleware, exclude_list: list[str]) -> AgentMiddleware:
+        if hasattr(mw, "tools"):
+            mw.tools = [
+                t for t in mw.tools 
+                if (t.name if hasattr(t, "name") else t.get("name")) not in exclude_list
+            ]
+        return mw
 
     deepagent_middleware = [
-        TodoListMiddleware(),
-        FilesystemMiddleware(backend=backend),
-        SubAgentMiddleware(
-            default_model=model,
-            default_tools=tools,
-            subagents=subagents if subagents is not None else [],
-            default_middleware=[
-                TodoListMiddleware(),
-                FilesystemMiddleware(backend=backend),
-                SummarizationMiddleware(
-                    model=model,
-                    trigger=trigger,
-                    keep=keep,
-                    trim_tokens_to_summarize=None,
-                ),
-                AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
-                PatchToolCallsMiddleware(),
-            ],
-            default_interrupt_on=interrupt_on,
-            general_purpose_agent=True,
+        filter_tools(TodoListMiddleware(), main_exclude),
+        filter_tools(FilesystemMiddleware(backend=backend), main_exclude),
+        filter_tools(
+            SubAgentMiddleware(
+                default_model=model,
+                default_tools=tools,
+                subagents=subagents if subagents is not None else [],
+                default_middleware=[
+                    filter_tools(TodoListMiddleware(), sub_exclude),
+                    filter_tools(FilesystemMiddleware(backend=backend), sub_exclude),
+                    SummarizationMiddleware(
+                        model=model,
+                        trigger=trigger,
+                        keep=keep,
+                        trim_tokens_to_summarize=None,
+                    ),
+                    AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
+                    PatchToolCallsMiddleware(),
+                ],
+                default_interrupt_on=interrupt_on,
+                general_purpose_agent=True,
+            ),
+            main_exclude
         ),
         SummarizationMiddleware(
             model=model,
@@ -141,6 +188,8 @@ def create_deep_agent(
         AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
         PatchToolCallsMiddleware(),
     ]
+
+    print(f"DEBUG: Loading {len(deepagent_middleware)} middlewares for agent: {name}")
     if middleware:
         deepagent_middleware.extend(middleware)
     if interrupt_on is not None:

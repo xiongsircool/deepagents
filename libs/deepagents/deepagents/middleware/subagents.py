@@ -331,6 +331,7 @@ def _create_task_tool(
         subagent = subagent_graphs[subagent_type]
         # Create a new state dict to avoid mutating the original
         subagent_state = {k: v for k, v in runtime.state.items() if k not in _EXCLUDED_STATE_KEYS}
+        # Add the description as a HumanMessage to the state
         subagent_state["messages"] = [HumanMessage(content=description)]
         return subagent, subagent_state
 
@@ -350,6 +351,17 @@ def _create_task_tool(
             allowed_types = ", ".join([f"`{k}`" for k in subagent_graphs])
             return f"We cannot invoke subagent {subagent_type} because it does not exist, the only allowed types are {allowed_types}"
         subagent, subagent_state = _validate_and_prepare_state(subagent_type, description, runtime)
+        
+        # --- Optimized Debug Output ---
+        # print("\n" + "💠" * 20 + " SUBAGENT DEBUG MONITOR " + "💠" * 20)
+        # print(f"📍 Agent Type: {subagent_type}")
+        # print(f"📜 Task Description From Main Agent:\n   {description}")
+        # print(f"💬 Resulting Subagent Message List (The first message it sees):")
+        # for i, msg in enumerate(subagent_state['messages']):
+        #      print(f"   [{i}] {type(msg).__name__}: {msg.content}")
+        # print("💠" * 60 + "\n")
+        # ------------------------------
+
         result = subagent.invoke(subagent_state)
         if not runtime.tool_call_id:
             value_error_msg = "Tool call ID is required for subagent invocation"
@@ -472,10 +484,11 @@ class SubAgentMiddleware(AgentMiddleware):
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse:
         """Update the system prompt to include instructions on using subagents."""
-        if self.system_prompt is not None:
+        if self.system_prompt is not None and self.tools:
             system_prompt = request.system_prompt + "\n\n" + self.system_prompt if request.system_prompt else self.system_prompt
             return handler(request.override(system_prompt=system_prompt))
         return handler(request)
+
 
     async def awrap_model_call(
         self,
@@ -483,7 +496,8 @@ class SubAgentMiddleware(AgentMiddleware):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
         """(async) Update the system prompt to include instructions on using subagents."""
-        if self.system_prompt is not None:
+        if self.system_prompt is not None and self.tools:
             system_prompt = request.system_prompt + "\n\n" + self.system_prompt if request.system_prompt else self.system_prompt
             return await handler(request.override(system_prompt=system_prompt))
         return await handler(request)
+

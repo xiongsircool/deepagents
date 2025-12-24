@@ -275,17 +275,22 @@ Examples:
 Note: This tool is only available if the backend supports execution (SandboxBackendProtocol).
 If execution is not supported, the tool will return an error message."""
 
-FILESYSTEM_SYSTEM_PROMPT = """## Filesystem Tools `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`
+FILESYSTEM_TOOL_DESCRIPTIONS = {
+    "ls": "- ls: list files in a directory (requires absolute path)",
+    "read_file": "- read_file: read a file from the filesystem",
+    "write_file": "- write_file: write to a file in the filesystem",
+    "edit_file": "- edit_file: edit a file in the filesystem",
+    "glob": "- glob: find files matching a pattern (e.g., \"**/*.py\")",
+    "grep": "- grep: search for text within files",
+}
 
-You have access to a filesystem which you can interact with using these tools.
-All file paths must start with a /.
+def _get_filesystem_system_prompt(enabled_tool_names: list[str]) -> str:
+    """Generate the filesystem system prompt based on enabled tools."""
+    header = "## Filesystem Tools `" + "`, `".join(t for t in enabled_tool_names if t != "execute") + "`"
+    body = "\n\nYou have access to a filesystem which you can interact with using these tools.\nAll file paths must start with a /.\n\n"
+    tool_list = "\n".join(FILESYSTEM_TOOL_DESCRIPTIONS[name] for name in enabled_tool_names if name in FILESYSTEM_TOOL_DESCRIPTIONS)
+    return header + body + tool_list
 
-- ls: list files in a directory (requires absolute path)
-- read_file: read a file from the filesystem
-- write_file: write to a file in the filesystem
-- edit_file: edit a file in the filesystem
-- glob: find files matching a pattern (e.g., "**/*.py")
-- grep: search for text within files"""
 
 EXECUTION_SYSTEM_PROMPT = """## Execute Tool `execute`
 
@@ -914,13 +919,18 @@ class FilesystemMiddleware(AgentMiddleware):
             system_prompt = self._custom_system_prompt
         else:
             # Build dynamic system prompt based on available tools
-            prompt_parts = [FILESYSTEM_SYSTEM_PROMPT]
+            enabled_tool_names = [(t.name if hasattr(t, "name") else t.get("name", "")) for t in self.tools]
+            if not enabled_tool_names or (len(enabled_tool_names) == 1 and enabled_tool_names[0] == "execute"):
+                system_prompt = ""
+            else:
+                prompt_parts = [_get_filesystem_system_prompt(enabled_tool_names)]
 
-            # Add execution instructions if execute tool is available
-            if has_execute_tool and backend_supports_execution:
-                prompt_parts.append(EXECUTION_SYSTEM_PROMPT)
+                # Add execution instructions if execute tool is available
+                if has_execute_tool and backend_supports_execution:
+                    prompt_parts.append(EXECUTION_SYSTEM_PROMPT)
 
-            system_prompt = "\n\n".join(prompt_parts)
+                system_prompt = "\n\n".join(prompt_parts)
+
 
         if system_prompt:
             request = request.override(system_prompt=request.system_prompt + "\n\n" + system_prompt if request.system_prompt else system_prompt)
@@ -957,17 +967,23 @@ class FilesystemMiddleware(AgentMiddleware):
                 has_execute_tool = False
 
         # Use custom system prompt if provided, otherwise generate dynamically
+        # Use custom system prompt if provided, otherwise generate dynamically
         if self._custom_system_prompt is not None:
             system_prompt = self._custom_system_prompt
         else:
             # Build dynamic system prompt based on available tools
-            prompt_parts = [FILESYSTEM_SYSTEM_PROMPT]
+            enabled_tool_names = [(t.name if hasattr(t, "name") else t.get("name", "")) for t in self.tools]
+            if not enabled_tool_names or (len(enabled_tool_names) == 1 and enabled_tool_names[0] == "execute"):
+                system_prompt = ""
+            else:
+                prompt_parts = [_get_filesystem_system_prompt(enabled_tool_names)]
 
-            # Add execution instructions if execute tool is available
-            if has_execute_tool and backend_supports_execution:
-                prompt_parts.append(EXECUTION_SYSTEM_PROMPT)
+                # Add execution instructions if execute tool is available
+                if has_execute_tool and backend_supports_execution:
+                    prompt_parts.append(EXECUTION_SYSTEM_PROMPT)
 
-            system_prompt = "\n\n".join(prompt_parts)
+                system_prompt = "\n\n".join(prompt_parts)
+
 
         if system_prompt:
             request = request.override(system_prompt=request.system_prompt + "\n\n" + system_prompt if request.system_prompt else system_prompt)
