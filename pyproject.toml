@@ -1,0 +1,37 @@
+[project]
+name = "deepagents"
+version = "0.3.0-up"
+description = "General purpose 'deep agent' with sub-agent spawning, todo list capabilities, and mock file system. Built on LangGraph."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11,<4.0"
+authors = [
+    { name = "熊湘毅", email = "1666526339@qq.com" }
+]
+dependencies = [
+    "langchain-anthropic>=1.2.0,<2.0.0",
+    "langchain-google-genai",
+    "langchain>=1.1.0,<2.0.0",
+    "langchain-core>=1.1.0,<2.0.0",
+    "wcmatch",
+]
+
+[project.urls]
+Homepage = "https://docs.langchain.com/oss/python/deepagents/overview"
+Documentation = "https://reference.langchain.com/python/deepagents/"
+Source = "https://github.com/langchain-ai/deepagents"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# 包在 libs/deepagents 子目录中
+package-dir = {"" = "libs/deepagents"}
+packages = ["deepagents"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed", "*.md"]
